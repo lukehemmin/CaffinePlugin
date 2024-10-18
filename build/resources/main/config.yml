@@ -1,0 +1,39 @@
+# 데이터베이스 설정
+database:
+  jdbcUrl: "jdbc:mariadb://localhost:3306/prison_db"
+  username: "your_username"
+  password: "your_password"
+
+# 감옥 설정
+prison:
+  # 감옥 위치
+  world: "world"
+  x: 0.0
+  y: 64.0
+  z: 0.0
+  yaw: 0.0
+  pitch: 0.0
+
+  # 감옥 범위
+  pos1:
+    world: "world"
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  pos2:
+    world: "world"
+    x: 10.0
+    y: 10.0
+    z: 10.0
+
+  # 감옥 곡괭이 종류
+  pickaxe: ""
+
+  # 감옥 NPC ID
+  npcId: -1
+
+  # 석탄 재생성 시간 (초)
+  coalRegenerationTime: 60
+
+# 기타 설정
+# (필요에 따라 추가)

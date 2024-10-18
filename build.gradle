@@ -1,5 +1,7 @@
 plugins {
     id 'java'
+    id 'org.jetbrains.kotlin.jvm'
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = 'com.Caffine'
@@ -15,17 +17,24 @@ repositories {
         name = "sonatype"
         url = "https://oss.sonatype.org/content/groups/public/"
     }
+    maven {
+        name = 'citizens-repo'
+        url = 'https://maven.citizensnpcs.co/repo'
+    }
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.20.1-R0.1-SNAPSHOT")
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    compileOnly('net.citizensnpcs:citizens-main:2.0.32-SNAPSHOT') {
+        exclude group: '*', module: '*'
+    }
+    implementation 'com.zaxxer:HikariCP:5.0.1'
 }
 
 def targetJavaVersion = 17
 java {
     def javaVersion = JavaVersion.toVersion(targetJavaVersion)
-    sourceCompatibility = javaVersion
-    targetCompatibility = javaVersion
     if (JavaVersion.current() < javaVersion) {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
@@ -45,5 +54,19 @@ processResources {
     filteringCharset 'UTF-8'
     filesMatching('plugin.yml') {
         expand props
+    }
+}
+kotlin {
+    jvmToolchain(17)
+}
+shadowJar {
+    archivesBaseName = "caffinePlugin"
+    if (System.getenv("CI") == null) {
+        //destinationDirectory = file("/Users/lukehemmin/Desktop/plugin_devlop/plugins")
+        destinationDirectory = file("C:/Users/Administrator/Desktop/1.20.1/plugins")
+        //destinationDirectory = file("\\\\WIN-8SUPV4GS74F\\plugins")
+    }
+    manifest {
+        attributes 'Main-Class': 'com.Caffine.caffinePlugin.Main'
     }
 }
