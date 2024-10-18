@@ -1,0 +1,4 @@
+name: CaffinePlugin
+version: '1.0-SNAPSHOT'
+main: com.Caffine.caffinePlugin.CaffinePlugin
+api-version: '1.20'
