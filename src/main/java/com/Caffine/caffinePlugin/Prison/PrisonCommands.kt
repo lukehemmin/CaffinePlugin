@@ -3,11 +3,13 @@ package com.Caffine.caffinePlugin.Prison
 import com.Caffine.caffinePlugin.Main
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import org.bukkit.persistence.PersistentDataType
 
 class PrisonCommands(private val prisonListeners: PrisonListeners) : CommandExecutor {
 
@@ -121,17 +123,35 @@ class PrisonCommands(private val prisonListeners: PrisonListeners) : CommandExec
             return
         }
         val duration = args[1].toIntOrNull()
-        if (duration !in VALID_DURATIONS) {
+        if (duration == null || duration !in VALID_DURATIONS) {
             player.sendMessage("티켓 시간은 5, 10, 15분 중 하나여야 합니다.")
             return
         }
-        val ticket = ItemStack(Material.PAPER)
-        val meta = ticket.itemMeta
-        meta?.setDisplayName("감옥 티켓: $duration 분")
-        meta?.lore = listOf("우클릭으로 플레이어를 감옥에 보냅니다.")
-        ticket.itemMeta = meta
-        player.inventory.addItem(ticket)
-        player.sendMessage("$duration 분짜리 감옥 티켓이 생성되었습니다.")
+
+        val itemInHand = player.inventory.itemInMainHand
+        if (itemInHand.type == Material.AIR) {
+            player.sendMessage("손에 아이템을 들고 있어야 합니다.")
+            return
+        }
+
+        val meta = itemInHand.itemMeta ?: return
+        meta.setDisplayName("§6감옥 티켓 ($duration 분)")
+        val lore = listOf(
+            "§7우클릭으로 플레이어를 감옥에 보냅니다.",
+            "§7시간: $duration 분"
+        )
+        meta.lore = lore
+
+        // 커스텀 데이터 추가
+        val container = meta.persistentDataContainer
+        val isPrisonTicketKey = NamespacedKey(Main.instance, "isPrisonTicket")
+        val prisonTimeKey = NamespacedKey(Main.instance, "prisonTime")
+        container.set(isPrisonTicketKey, PersistentDataType.BOOLEAN, true)
+        container.set(prisonTimeKey, PersistentDataType.INTEGER, duration)
+
+        itemInHand.itemMeta = meta
+
+        player.sendMessage("손에 든 아이템이 ${duration}분짜리 감옥 티켓으로 변환되었습니다.")
     }
 
     private fun setNPC(player: Player) {
@@ -186,7 +206,7 @@ class PrisonCommands(private val prisonListeners: PrisonListeners) : CommandExec
             sender.sendMessage("유효한 시간(초)를 입력해주세요.")
             return
         }
-        Prison.setCoalRegenerationTime(seconds)
+        Prison.coalRegenerationTime = seconds // 여기를 수정
         sender.sendMessage("석탄 재생성 시간이 ${seconds}초로 설정되었습니다.")
     }
 }

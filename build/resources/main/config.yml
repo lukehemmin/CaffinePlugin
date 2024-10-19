@@ -1,6 +1,10 @@
+debug_mode: true
+
 # 데이터베이스 설정
 database:
-  jdbcUrl: "jdbc:mariadb://localhost:3306/prison_db"
+  host: "localhost"
+  port: 3306
+  dbname: "prison_db"
   username: "your_username"
   password: "your_password"
 

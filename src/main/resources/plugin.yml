@@ -2,3 +2,40 @@ name: CaffinePlugin
 version: '1.0-SNAPSHOT'
 main: com.Caffine.caffinePlugin.Main
 api-version: '1.20'
+depend: [Citizens]
+
+commands:
+  감옥관리:
+    description: 감옥 시스템 관리 명령어
+    usage: /<command> [감옥지정|티켓|npc지정|곡괭이지정|강제종료|리로드|pos1|pos2|석탄재생시간]
+    aliases: [prison, prisonmanage]
+
+permissions:
+  prison.admin:
+    description: 감옥 시스템의 모든 관리 권한을 부여합니다.
+    default: op
+    children:
+      prison.set.location: true
+      prison.create.ticket: true
+      prison.set.npc: true
+      prison.set.pickaxe: true
+      prison.release: true
+      prison.reload: true
+  prison.set.location:
+    description: 감옥 위치를 설정할 수 있는 권한
+    default: op
+  prison.create.ticket:
+    description: 감옥 티켓을 생성할 수 있는 권한
+    default: op
+  prison.set.npc:
+    description: 감옥 NPC를 설정할 수 있는 권한
+    default: op
+  prison.set.pickaxe:
+    description: 감옥 곡괭이를 설정할 수 있는 권한
+    default: op
+  prison.release:
+    description: 죄수를 강제로 석방할 수 있는 권한
+    default: op
+  prison.reload:
+    description: 감옥 시스템 설정을 리로드할 수 있는 권한
+    default: op

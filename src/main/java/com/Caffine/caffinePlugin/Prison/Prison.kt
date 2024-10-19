@@ -21,6 +21,7 @@ import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.sql.Connection
+import java.time.LocalDateTime
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -28,8 +29,8 @@ object Prison {
     lateinit var location: Location
         private set
 
-    lateinit var pickaxe: ItemStack
-        private set  // private set 추가
+    var pickaxe: ItemStack? = null
+        private set
 
     lateinit var pos1: Location
     lateinit var pos2: Location
@@ -39,15 +40,70 @@ object Prison {
     private val prisonerTimers = mutableMapOf<UUID, BukkitTask>()
     private val prisonerBossBars = mutableMapOf<UUID, BossBar>()
 
-    var coalRegenerationTime: Long = 60 // 기본값 60초
+    private var _coalRegenerationTime: Long = 60 // 기본값 60초
+    private const val COAL_TIME_REDUCTION = 1 // 석탄 1개당 60초 감소
+    var coalRegenerationTime: Long
+        get() = _coalRegenerationTime
+        set(value) {
+            _coalRegenerationTime = value
+            savePrisonData(Main.instance.config)
+        }
+
+    data class Prisoner(
+        var releaseTime: LocalDateTime,
+        var coalSubmitted: Int = 0
+    )
+
+    fun isPrisoner(uuid: UUID): Boolean {
+        return prisoners.containsKey(uuid)
+    }
+
+    fun submitCoal(uuid: UUID, amount: Int) {
+        val releaseTime = prisoners[uuid] ?: return
+        val timeReduction = amount * COAL_TIME_REDUCTION * 1000L // 밀리초 단위로 변환
+        val newReleaseTime = (releaseTime - timeReduction).coerceAtLeast(System.currentTimeMillis())
+        prisoners[uuid] = newReleaseTime
+
+        val player = Bukkit.getPlayer(uuid)
+        player?.let {
+            val remainingTime = (newReleaseTime - System.currentTimeMillis()) / 1000
+            it.sendMessage("§a${amount}개의 석탄을 제출했습니다. 감소된 시간: ${amount}초")
+            it.sendMessage("§a남은 시간: ${formatTime(remainingTime)}")
+            updatePrisonBossBar(it, newReleaseTime - System.currentTimeMillis())
+        }
+
+        // 데이터베이스 업데이트
+        try {
+            Database.executeTransaction { conn ->
+                conn.prepareStatement("UPDATE prisoners SET release_time = ? WHERE uuid = ?").use { stmt ->
+                    stmt.setLong(1, newReleaseTime)
+                    stmt.setString(2, uuid.toString())
+                    stmt.executeUpdate()
+                }
+            }
+        } catch (e: Exception) {
+            logError("석탄 제출 후 데이터베이스 업데이트 중 오류 발생", e)
+        }
+
+        // 만약 석방 시간이 현재 시간보다 이전이라면 즉시 석방
+        if (newReleaseTime <= System.currentTimeMillis()) {
+            player?.let { releasePrisoner(it) }
+        }
+    }
 
     fun initialize(config: FileConfiguration) {
         try {
+            Main.instance.logger.info("감옥 시스템 초기화 시작")
             loadPrisonData(config)
             Bukkit.getScheduler().runTaskTimer(Main.instance, ::checkPrisoners, 20L, 20L)
             Main.instance.logger.info("감옥 시스템이 초기화되었습니다.")
         } catch (e: Exception) {
             logError("감옥 시스템 초기화 중 오류 발생", e)
+            // 기본값 설정
+            if (!::location.isInitialized) location = Location(Bukkit.getWorlds()[0], 0.0, 64.0, 0.0)
+            if (!::pos1.isInitialized) pos1 = location
+            if (!::pos2.isInitialized) pos2 = location
+            if (pickaxe == null) pickaxe = ItemStack(Material.STONE_PICKAXE)
         }
     }
 
@@ -77,6 +133,8 @@ object Prison {
 
     fun loadPrisonData(config: FileConfiguration) {
         try {
+            Main.instance.logger.info("감옥 데이터 로드 시작")
+
             val world = Bukkit.getWorld(config.getString("prison.world", "world") ?: "world")
             val x = config.getDouble("prison.x", 0.0)
             val y = config.getDouble("prison.y", 64.0)
@@ -84,26 +142,48 @@ object Prison {
             val yaw = config.getDouble("prison.yaw", 0.0).toFloat()
             val pitch = config.getDouble("prison.pitch", 0.0).toFloat()
             location = Location(world, x, y, z, yaw, pitch)
+            Main.instance.logger.info("감옥 위치 로드: $location")
 
             pos1 = config.getSerializable("prison.pos1", Location::class.java) ?: location
             pos2 = config.getSerializable("prison.pos2", Location::class.java) ?: location
+            Main.instance.logger.info("감옥 범위 로드: pos1=$pos1, pos2=$pos2")
 
             coalRegenerationTime = config.getLong("prison.coalRegenerationTime", 60)
+            Main.instance.logger.info("석탄 재생성 시간 로드: $coalRegenerationTime 초")
 
-            val pickaxeString = config.getString("prison.pickaxe")
-            pickaxe = if (pickaxeString != null) {
-                deserializeFromString(pickaxeString)
-            } else {
+            // pickaxe 로딩 부분 수정
+            pickaxe = try {
+                val pickaxeString = config.getString("prison.pickaxe")
+                if (pickaxeString.isNullOrEmpty()) {
+                    Main.instance.logger.info("곡괭이 정보가 없습니다. 기본 곡괭이로 설정합니다.")
+                    ItemStack(Material.STONE_PICKAXE)
+                } else {
+                    Main.instance.logger.info("곡괭이 정보 로드 중")
+                    deserializeFromString(pickaxeString)
+                }
+            } catch (e: Exception) {
+                Main.instance.logger.warning("곡괭이 정보 로드 중 오류 발생, 기본 곡괭이로 설정됩니다: ${e.message}")
                 ItemStack(Material.STONE_PICKAXE)
             }
+            Main.instance.logger.info("곡괭이 설정 완료: ${pickaxe?.type}")
 
             npcId = config.getInt("prison.npcId", -1).takeIf { it != -1 }
+            Main.instance.logger.info("NPC ID 로드: $npcId")
 
-            loadPrisonersData()
+            if (Database.isInitialized()) {
+                loadPrisonersData()
+            } else {
+                Main.instance.logger.warning("데이터베이스가 초기화되지 않아 감옥 유저 데이터를 로드할 수 없습니다.")
+            }
 
-            Main.instance.logger.info("감옥 정보가 로드되었습니다.")
+            Main.instance.logger.info("감옥 정보가 성공적으로 로드되었습니다.")
         } catch (e: Exception) {
             logError("감옥 정보 로드 중 오류 발생", e)
+            // 기본값 설정
+            if (!::location.isInitialized) location = Location(Bukkit.getWorlds()[0], 0.0, 64.0, 0.0)
+            if (!::pos1.isInitialized) pos1 = location
+            if (!::pos2.isInitialized) pos2 = location
+            if (pickaxe == null) pickaxe = ItemStack(Material.STONE_PICKAXE)
         }
     }
 
@@ -148,11 +228,11 @@ object Prison {
         config.set("prison.z", location.z)
         config.set("prison.yaw", location.yaw)
         config.set("prison.pitch", location.pitch)
-        config.set("prison.pickaxe", pickaxe.serializeAsString())
+        config.set("prison.pickaxe", pickaxe?.serializeAsString())  // 여기를 수정
         config.set("prison.npcId", npcId)
         config.set("prison.pos1", pos1.serialize())
         config.set("prison.pos2", pos2.serialize())
-        config.set("prison.coalRegenerationTime", coalRegenerationTime)
+        config.set("prison.coalRegenerationTime", _coalRegenerationTime)
 
         Main.instance.saveConfig()
         Main.instance.logger.info("감옥 정보가 저장되었습니다.")
@@ -168,8 +248,9 @@ object Prison {
         prisonerBossBars[player.uniqueId] = bossBar
     }
 
-    // ItemStack을 문자열로 직렬화하는 확장 함수
-    private fun ItemStack.serializeAsString(): String {
+    // ItemStack을 문자열로 직렬화하는 함수
+    private fun ItemStack?.serializeAsString(): String? {
+        if (this == null) return null
         val outputStream = ByteArrayOutputStream()
         val dataOutput = BukkitObjectOutputStream(outputStream)
         dataOutput.writeObject(this)
@@ -177,15 +258,13 @@ object Prison {
         return Base64Coder.encodeLines(outputStream.toByteArray())
     }
 
-    companion object {
-        // 문자열에서 ItemStack으로 역직렬화하는 함수
-        fun deserializeFromString(data: String): ItemStack {
-            val inputStream = ByteArrayInputStream(Base64Coder.decodeLines(data))
-            val dataInput = BukkitObjectInputStream(inputStream)
-            val item = dataInput.readObject() as ItemStack
-            dataInput.close()
-            return item
-        }
+    // 문자열에서 ItemStack으로 역직렬화하는 함수
+    private fun deserializeFromString(data: String): ItemStack {
+        val inputStream = ByteArrayInputStream(Base64Coder.decodeLines(data))
+        val dataInput = BukkitObjectInputStream(inputStream)
+        val item = dataInput.readObject() as ItemStack
+        dataInput.close()
+        return item
     }
 
     private fun updatePrisonBossBar(player: Player, remainingTime: Long) {
@@ -228,19 +307,19 @@ object Prison {
         val releaseTime = System.currentTimeMillis() + (duration * 60 * 1000)
         prisoners[player.uniqueId] = releaseTime
 
+        player.teleport(location)
+        player.inventory.clear()
+        pickaxe?.let { player.inventory.addItem(it) }
+
+        createPrisonBossBar(player, duration)
+        startPrisonTimer(player)
+
+        // 데이터베이스에 저장
         try {
             Database.executeTransaction { conn ->
                 insertPrisonerData(conn, player.uniqueId, releaseTime, player.location)
                 saveInventoryToDatabase(conn, player)
             }
-
-            player.teleport(location)
-            player.inventory.clear()
-            player.inventory.addItem(pickaxe)
-            player.sendMessage("당신은 $duration 분 동안 감옥에 수감되었습니다.")
-
-            createPrisonBossBar(player, duration)
-            startPrisonTimer(player)
         } catch (e: Exception) {
             logError("감옥 유저 데이터 저장 중 오류 발생", e)
         }
@@ -354,7 +433,7 @@ object Prison {
                 prisoners[player.uniqueId] = releaseTime
                 player.teleport(location)
                 player.inventory.clear()
-                player.inventory.addItem(pickaxe)
+                pickaxe?.let { player.inventory.addItem(it) }
                 val remainingTime = (releaseTime - System.currentTimeMillis()) / 1000
                 player.sendMessage("당신은 감옥에 ${formatTime(remainingTime)} 동안 더 있어야 합니다.")
                 createPrisonBossBar(player, (remainingTime / 60).toInt())
@@ -519,8 +598,5 @@ object Prison {
         return items.toTypedArray()
     }
 
-    fun setCoalRegenerationTime(seconds: Long) {
-        coalRegenerationTime = seconds
-        savePrisonData(Main.instance.config)
-    }
+
 }
