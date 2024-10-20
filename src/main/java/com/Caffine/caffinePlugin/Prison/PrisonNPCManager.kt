@@ -52,15 +52,17 @@ object PrisonNPCManager : Listener {
             val remainingTime = database.getPlayerJailTime(player.uniqueId)
             val newTime = maxOf(0, remainingTime - timeReduction * 1000) // 밀리초 단위로 변환
 
-            database.updatePlayerJailStatus(player.uniqueId, true, newTime, System.currentTimeMillis())
+            database.updateJailPlayerStatus(player.uniqueId, player.name, true, newTime)
             player.inventory.remove(ItemStack(Material.COAL, coalCount))
             player.sendMessage("§a${coalCount}개의 석탄을 제출하여 ${coalCount}초의 시간이 감소되었습니다.")
 
             if (newTime == 0L) {
                 PrisonUtils.releasePlayer(player)
             } else {
-                val remainingMinutes = newTime / 60000 // 분 단위로 변환
-                player.sendMessage("§a남은 시간: ${remainingMinutes}분")
+                val remainingMinutes = newTime / 60000
+                val remainingSeconds = (newTime % 60000) / 1000
+                player.sendMessage("§a남은 시간: ${remainingMinutes}분 ${remainingSeconds}초")
+                PrisonUtils.updateBossBar(player, newTime) // 보스바 업데이트
             }
         } else {
             player.sendMessage("§c석탄이 없습니다. 석탄을 모아오세요.")

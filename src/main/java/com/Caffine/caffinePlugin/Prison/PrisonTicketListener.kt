@@ -9,6 +9,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerInteractEntityEvent
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.util.io.BukkitObjectInputStream
@@ -21,16 +22,24 @@ class PrisonTicketListener(private val plugin: JavaPlugin, private val database:
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onPlayerInteractEntity(event: PlayerInteractEntityEvent) {
+        // 주 손으로 발생한 이벤트인지 확인
+        if (event.hand != EquipmentSlot.HAND) return
+
         val player = event.player
+        val itemInHand = player.inventory.itemInMainHand
+
+        // 감옥 티켓을 들고 있는지 먼저 확인
+        if (!isPrisonTicket(itemInHand)) return
+
         val currentTime = System.currentTimeMillis()
+        plugin.logger.info("이벤트 발생: ${event.player.name}, 시간: ${System.currentTimeMillis()}")
 
         if (currentTime - (cooldowns[player.uniqueId] ?: 0) < COOLDOWN_TIME) {
-            // 쿨다운 중일 때의 처리
-            // 메시지를 비활성화하려면 이 부분을 주석 처리하거나 제거하세요
-            // player.sendMessage("§c아직 티켓을 사용할 수 없습니다.")
             event.isCancelled = true
             return
         }
+
+        cooldowns[player.uniqueId] = currentTime
 
         val clickedEntity = event.rightClicked
 
@@ -42,7 +51,6 @@ class PrisonTicketListener(private val plugin: JavaPlugin, private val database:
             return
         }
 
-        val itemInHand = player.inventory.itemInMainHand
         if (!isPrisonTicket(itemInHand)) return
 
         event.isCancelled = true
@@ -58,9 +66,12 @@ class PrisonTicketListener(private val plugin: JavaPlugin, private val database:
 
         try {
             PrisonUtils.imprisonPlayer(clickedEntity, duration)
-            removeTicketFromHand(player)
+            removeTicketFromHand(player) // 아이템 회수 로직 추가
             player.sendMessage("${clickedEntity.name}을(를) ${duration}분 동안 감옥에 가두었습니다.")
             plugin.logger.info("${player.name}이(가) ${clickedEntity.name}을(를) ${duration}분 동안 감옥에 가두었습니다.")
+
+            // 보스바 표시
+            PrisonUtils.showBossBar(clickedEntity, duration * 60 * 1000L)
 
             // 쿨다운 설정
             cooldowns[player.uniqueId] = currentTime

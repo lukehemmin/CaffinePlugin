@@ -3,6 +3,10 @@ package com.Caffine.caffinePlugin.Prison
 import com.Caffine.caffinePlugin.System.Database
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.boss.BarColor
+import org.bukkit.boss.BarFlag
+import org.bukkit.boss.BarStyle
+import org.bukkit.boss.BossBar
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
@@ -13,6 +17,8 @@ import java.util.*
 object PrisonUtils {
     lateinit var plugin: JavaPlugin
     lateinit var database: Database
+    private val playerBossBars = mutableMapOf<UUID, BossBar>()
+    private val playerRemainingTimes = mutableMapOf<UUID, Long>()
 
     fun init(plugin: JavaPlugin, database: Database) {
         this.plugin = plugin
@@ -38,7 +44,7 @@ object PrisonUtils {
         }
 
         // 감옥 상태 업데이트
-        database.updatePlayerJailStatus(player.uniqueId, false, 0, System.currentTimeMillis())
+        database.updateJailPlayerStatus(player.uniqueId, player.name, false, 0)
 
         // 저장된 데이터 삭제
         database.removePlayerJailData(player.uniqueId)
@@ -81,7 +87,9 @@ object PrisonUtils {
             giveJailPickaxe(prisoner)
 
             // 감옥 상태 업데이트
-            database.updatePlayerJailStatus(prisoner.uniqueId, true, duration * 60 * 1000L, System.currentTimeMillis())
+            val remainingTime = duration * 60 * 1000L
+            database.updateJailPlayerStatus(prisoner.uniqueId, prisoner.name, true, remainingTime)
+            playerRemainingTimes[prisoner.uniqueId] = remainingTime
 
             prisoner.sendMessage("당신은 ${duration}분 동안 감옥에 수감되었습니다.")
 
@@ -113,5 +121,58 @@ object PrisonUtils {
         val item = ois.readObject() as ItemStack
         ois.close()
         return item
+    }
+
+    fun showBossBar(player: Player, remainingTime: Long) {
+        val bossBar = Bukkit.createBossBar(
+            "남은 감옥 시간: ${remainingTime / 60000}분 ${remainingTime % 60000 / 1000}초",
+            BarColor.RED,
+            BarStyle.SOLID,
+            BarFlag.CREATE_FOG
+        )
+        bossBar.addPlayer(player)
+        playerBossBars[player.uniqueId] = bossBar
+
+        // 보스바 업데이트 스케줄러 시작
+        startBossBarUpdater(player, remainingTime)
+    }
+
+    fun getRemainingTime(player: Player): Long? {
+        return playerRemainingTimes[player.uniqueId]
+    }
+
+    private fun startBossBarUpdater(player: Player, remainingTime: Long) {
+        val taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, object : Runnable {
+            var timeLeft = remainingTime
+
+            override fun run() {
+                if (timeLeft <= 0) {
+                    removeBossBar(player)
+                    Bukkit.getScheduler().cancelTask(this.hashCode())
+                    return
+                }
+
+                updateBossBar(player, timeLeft)
+                playerRemainingTimes[player.uniqueId] = timeLeft
+                timeLeft -= 1000 // 1초 감소
+            }
+        }, 0L, 20L) // 20틱(1초)마다 실행
+
+        // 플레이어의 보스바 업데이트 태스크 ID 저장
+        playerBossBars[player.uniqueId]?.setProgress(1.0)
+    }
+
+    fun updateBossBar(player: Player, remainingTime: Long) {
+        playerBossBars[player.uniqueId]?.let { bossBar ->
+            bossBar.setTitle("남은 감옥 시간: ${remainingTime / 60000}분 ${remainingTime % 60000 / 1000}초")
+            bossBar.progress = remainingTime / (remainingTime + 1000.0)
+        }
+    }
+
+    fun removeBossBar(player: Player) {
+        playerBossBars[player.uniqueId]?.let { bossBar ->
+            bossBar.removeAll()
+            playerBossBars.remove(player.uniqueId)
+        }
     }
 }

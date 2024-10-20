@@ -1,18 +1,17 @@
 package com.Caffine.caffinePlugin.System
 
-import com.Caffine.caffinePlugin.Prison.PrisonUtils.plugin
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import org.bukkit.configuration.file.FileConfiguration
-import java.sql.Connection
-import org.bukkit.Location
-import java.sql.SQLException
 import org.bukkit.Bukkit
+import org.bukkit.Location
+import org.bukkit.configuration.file.FileConfiguration
 import org.bukkit.inventory.ItemStack
 import org.bukkit.util.io.BukkitObjectInputStream
 import org.bukkit.util.io.BukkitObjectOutputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.sql.Connection
+import java.sql.SQLException
 import java.util.*
 
 class Database(config: FileConfiguration) {
@@ -47,23 +46,20 @@ class Database(config: FileConfiguration) {
                         y DOUBLE NOT NULL,
                         z DOUBLE NOT NULL
                     )
-                    """)
-                // JailPlayer 테이블 생성
+                """)
                 statement.execute("""
-                CREATE TABLE IF NOT EXISTS JailPlayer (
-                    uuid VARCHAR(36) PRIMARY KEY,
-                    nickname VARCHAR(16) NOT NULL,
-                    is_jailed BOOLEAN DEFAULT FALSE,
-                    remaining_time BIGINT DEFAULT 0,
-                    original_location_world VARCHAR(50),
-                    original_location_x DOUBLE,
-                    original_location_y DOUBLE,
-                    original_location_z DOUBLE,
-                    last_login_time BIGINT DEFAULT 0
-                )
-            """)
-
-                // JailInventory 테이블 생성
+                    CREATE TABLE IF NOT EXISTS JailPlayer (
+                        uuid VARCHAR(36) PRIMARY KEY,
+                        nickname VARCHAR(16) NOT NULL,
+                        is_jailed BOOLEAN DEFAULT FALSE,
+                        remaining_time BIGINT DEFAULT 0,
+                        original_location_world VARCHAR(50),
+                        original_location_x DOUBLE,
+                        original_location_y DOUBLE,
+                        original_location_z DOUBLE,
+                        last_login_time BIGINT DEFAULT 0
+                    )
+                """)
                 statement.execute("""
                     CREATE TABLE IF NOT EXISTS JailInventory (
                         uuid VARCHAR(36) PRIMARY KEY,
@@ -73,15 +69,12 @@ class Database(config: FileConfiguration) {
                         FOREIGN KEY (uuid) REFERENCES JailPlayer(uuid) ON DELETE CASCADE
                     )
                 """)
-
                 statement.execute("""
                     CREATE TABLE IF NOT EXISTS other_data (
                         name VARCHAR(50) PRIMARY KEY,
                         data TEXT NOT NULL
                     )
                 """)
-
-                // PlayerCooldowns 테이블 생성
                 statement.execute("""
                     CREATE TABLE IF NOT EXISTS PlayerCooldowns (
                         uuid VARCHAR(36) PRIMARY KEY,
@@ -189,10 +182,10 @@ class Database(config: FileConfiguration) {
         val connection = getConnection()
         connection.use { conn ->
             val stmt = conn.prepareStatement("""
-            INSERT INTO JailInventory (uuid, inventory_data, level, exp)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE inventory_data = ?, level = ?, exp = ?
-        """)
+                INSERT INTO JailInventory (uuid, inventory_data, level, exp)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE inventory_data = ?, level = ?, exp = ?
+            """)
             val inventoryData = Base64.getEncoder().encodeToString(serializeInventory(contents))
             stmt.setString(1, uuid.toString())
             stmt.setString(2, inventoryData)
@@ -225,17 +218,25 @@ class Database(config: FileConfiguration) {
         return Triple(null, 0, 0f)
     }
 
-    fun updatePlayerJailStatus(uuid: UUID, isJailed: Boolean, remainingTime: Long) {
+    fun updateJailPlayerStatus(uuid: UUID, nickname: String, isJailed: Boolean, remainingTime: Long) {
         val connection = getConnection()
         connection.use { conn ->
             val stmt = conn.prepareStatement("""
-                UPDATE JailPlayer
-                SET is_jailed = ?, remaining_time = ?
-                WHERE uuid = ?
+                INSERT INTO JailPlayer (uuid, nickname, is_jailed, remaining_time, last_login_time)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                nickname = ?, is_jailed = ?, remaining_time = ?, last_login_time = ?
             """)
-            stmt.setBoolean(1, isJailed)
-            stmt.setLong(2, remainingTime)
-            stmt.setString(3, uuid.toString())
+            val currentTime = System.currentTimeMillis()
+            stmt.setString(1, uuid.toString())
+            stmt.setString(2, nickname)
+            stmt.setBoolean(3, isJailed)
+            stmt.setLong(4, remainingTime)
+            stmt.setLong(5, currentTime)
+            stmt.setString(6, nickname)
+            stmt.setBoolean(7, isJailed)
+            stmt.setLong(8, remainingTime)
+            stmt.setLong(9, currentTime)
             stmt.executeUpdate()
         }
     }
@@ -316,22 +317,6 @@ class Database(config: FileConfiguration) {
         return 0L
     }
 
-    fun updatePlayerJailStatus(uuid: UUID, isJailed: Boolean, remainingTime: Long, lastLoginTime: Long) {
-        val connection = getConnection()
-        connection.use { conn ->
-            val stmt = conn.prepareStatement("""
-            UPDATE JailPlayer
-            SET is_jailed = ?, remaining_time = ?, last_login_time = ?
-            WHERE uuid = ?
-        """)
-            stmt.setBoolean(1, isJailed)
-            stmt.setLong(2, remainingTime)
-            stmt.setLong(3, lastLoginTime)
-            stmt.setString(4, uuid.toString())
-            stmt.executeUpdate()
-        }
-    }
-
     fun getPlayerJailInfo(uuid: UUID): Triple<Boolean, Long, Long>? {
         val connection = getConnection()
         connection.use { conn ->
@@ -352,28 +337,15 @@ class Database(config: FileConfiguration) {
     fun removePlayerJailData(playerUUID: UUID) {
         val connection = getConnection()
         connection.use { conn ->
-            // 플레이어 위치 데이터 삭제
-            conn.prepareStatement("DELETE FROM player_locations WHERE player_uuid = ?").use { stmt ->
+            conn.prepareStatement("DELETE FROM JailPlayer WHERE uuid = ?").use { stmt ->
                 stmt.setString(1, playerUUID.toString())
                 stmt.executeUpdate()
             }
-
-            // 플레이어 인벤토리 데이터 삭제
-            conn.prepareStatement("DELETE FROM player_inventories WHERE player_uuid = ?").use { stmt ->
+            conn.prepareStatement("DELETE FROM JailInventory WHERE uuid = ?").use { stmt ->
                 stmt.setString(1, playerUUID.toString())
                 stmt.executeUpdate()
             }
-
-            // 플레이어 감옥 상태 데이터 삭제
-            conn.prepareStatement("DELETE FROM jail_status WHERE player_uuid = ?").use { stmt ->
-                stmt.setString(1, playerUUID.toString())
-                stmt.executeUpdate()
-            }
-
-            // 필요한 경우 추가 테이블에서도 데이터 삭제
-            // 예: conn.prepareStatement("DELETE FROM other_jail_related_table WHERE player_uuid = ?")...
-
-            plugin.logger.info("플레이어 ${playerUUID}의 감옥 관련 데이터가 모두 삭제되었습니다.")
+            Bukkit.getLogger().info("플레이어 ${playerUUID}의 감옥 관련 데이터가 모두 삭제되었습니다.")
         }
     }
 

@@ -14,7 +14,7 @@ class PrisonLogoutListener(private val database: Database) : Listener {
         val player = event.player
         if (database.isPlayerJailed(player.uniqueId)) {
             val remainingTime = database.getPlayerJailTime(player.uniqueId)
-            database.updatePlayerJailStatus(player.uniqueId, true, remainingTime, System.currentTimeMillis())
+            database.updateJailPlayerStatus(player.uniqueId, player.name, true, remainingTime)
         }
     }
 
@@ -42,7 +42,7 @@ class PrisonLogoutListener(private val database: Database) : Listener {
                 PrisonUtils.scheduleRelease(player, remainingTime)
 
                 // 감옥 상태 업데이트 (마지막 로그인 시간 갱신)
-                database.updatePlayerJailStatus(player.uniqueId, true, remainingTime, currentTime)
+                database.updateJailPlayerStatus(player.uniqueId, player.name, true, remainingTime)
             } else {
                 // 감옥 시간이 끝났으므로 석방
                 PrisonUtils.releasePlayer(player)
