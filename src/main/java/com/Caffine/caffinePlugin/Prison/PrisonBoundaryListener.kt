@@ -14,6 +14,7 @@ class PrisonBoundaryListener(private val plugin: JavaPlugin, private val databas
 
     private data class Selection(val locations: MutableList<Location> = mutableListOf(), var lastSelectTime: Long = System.currentTimeMillis())
     private val playerSelections = mutableMapOf<UUID, Selection>()
+    private val selectionTimeout = 60000L // 1분
 
     @EventHandler
     fun onPlayerInteract(event: PlayerInteractEvent) {
@@ -39,8 +40,14 @@ class PrisonBoundaryListener(private val plugin: JavaPlugin, private val databas
         val location = clickedBlock.location
 
         val selection = playerSelections.getOrPut(player.uniqueId) { Selection() }
+        val currentTime = System.currentTimeMillis()
+
+        if (currentTime - selection.lastSelectTime > selectionTimeout) {
+            selection.locations.clear()
+        }
+
         selection.locations.add(location)
-        selection.lastSelectTime = System.currentTimeMillis()
+        selection.lastSelectTime = currentTime
 
         when (selection.locations.size) {
             1 -> player.sendMessage("§a첫 번째 지점이 선택되었습니다. (${location.blockX}, ${location.blockY}, ${location.blockZ})")

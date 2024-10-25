@@ -21,7 +21,7 @@ class PrisonBlockListener(private val plugin: JavaPlugin, private val database: 
             boundary1 = database.getPosition("prison_boundary_1")
             boundary2 = database.getPosition("prison_boundary_2")
             if (boundary1 == null || boundary2 == null) {
-                plugin.logger.warning("감옥 범위가 설정되지 않았습니다.")
+                throw IllegalStateException("감옥 범위가 설정되지 않았습니다.")
             }
         } catch (e: Exception) {
             plugin.logger.severe("감옥 범위를 로드하는 중 오류 발생: ${e.message}")
@@ -35,7 +35,10 @@ class PrisonBlockListener(private val plugin: JavaPlugin, private val database: 
 
         if (boundary1 == null || boundary2 == null) {
             loadBoundaries()
-            return
+            if (boundary1 == null || boundary2 == null) {
+                plugin.logger.warning("감옥 범위가 설정되지 않았습니다.")
+                return
+            }
         }
 
         if (isInPrisonBoundary(block.location, boundary1!!, boundary2!!)) {
@@ -49,6 +52,8 @@ class PrisonBlockListener(private val plugin: JavaPlugin, private val database: 
     }
 
     private fun isInPrisonBoundary(loc: org.bukkit.Location, boundary1: org.bukkit.Location, boundary2: org.bukkit.Location): Boolean {
+        if (boundary1.world != boundary2.world || boundary1.world != loc.world) return false
+
         val minX = minOf(boundary1.x, boundary2.x)
         val minY = minOf(boundary1.y, boundary2.y)
         val minZ = minOf(boundary1.z, boundary2.z)

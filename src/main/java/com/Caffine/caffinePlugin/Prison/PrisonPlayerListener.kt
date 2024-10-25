@@ -19,7 +19,7 @@ class PrisonPlayerListener(private val plugin: JavaPlugin, private val database:
         if (jailInfo != null && jailInfo.first) {
             val (isJailed, remainingTime, lastLoginTime) = jailInfo
             val currentTime = System.currentTimeMillis()
-            val newRemainingTime = remainingTime - (currentTime - lastLoginTime)
+            val newRemainingTime = remainingTime - (currentTime - lastLoginTime).coerceAtLeast(0)
 
             database.updateJailPlayerStatus(player.uniqueId, player.name, isJailed, newRemainingTime)
 
@@ -50,7 +50,7 @@ class PrisonPlayerListener(private val plugin: JavaPlugin, private val database:
             val (isJailed, remainingTime, lastLoginTime) = jailInfo
             val currentTime = System.currentTimeMillis()
             val timeSpentOnline = currentTime - lastLoginTime
-            val newRemainingTime = remainingTime - timeSpentOnline
+            val newRemainingTime = remainingTime - timeSpentOnline.coerceAtLeast(0)
 
             database.updateJailPlayerStatus(player.uniqueId, player.name, isJailed, newRemainingTime)
 
@@ -71,6 +71,7 @@ class PrisonPlayerListener(private val plugin: JavaPlugin, private val database:
                 })
             } else {
                 plugin.logger.warning("감옥 위치가 설정되지 않았습니다.")
+                player.sendMessage("§c감옥 위치가 설정되지 않았습니다. 관리자에게 문의하세요.")
             }
         }
     }

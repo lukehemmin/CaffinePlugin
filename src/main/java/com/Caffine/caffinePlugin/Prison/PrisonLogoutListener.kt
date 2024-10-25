@@ -13,8 +13,13 @@ class PrisonLogoutListener(private val database: Database) : Listener {
     fun onPlayerQuit(event: PlayerQuitEvent) {
         val player = event.player
         if (database.isPlayerJailed(player.uniqueId)) {
-            val remainingTime = database.getPlayerJailTime(player.uniqueId)
-            database.updateJailPlayerStatus(player.uniqueId, player.name, true, remainingTime)
+            val jailInfo = database.getPlayerJailInfo(player.uniqueId)
+            if (jailInfo != null) {
+                val (isJailed, remainingTime, lastLoginTime) = jailInfo
+                val currentTime = System.currentTimeMillis()
+                val newRemainingTime = remainingTime - (currentTime - lastLoginTime)
+                database.updateJailPlayerStatus(player.uniqueId, player.name, isJailed, newRemainingTime)
+            }
         }
     }
 
@@ -22,29 +27,23 @@ class PrisonLogoutListener(private val database: Database) : Listener {
     fun onPlayerJoin(event: PlayerJoinEvent) {
         val player = event.player
         val jailInfo = database.getPlayerJailInfo(player.uniqueId)
-
         if (jailInfo != null && jailInfo.first) {
             val (isJailed, remainingTime, lastLoginTime) = jailInfo
             val currentTime = System.currentTimeMillis()
-
-            if (remainingTime > 0) {
-                // 플레이어를 감옥으로 텔레포트
+            val newRemainingTime = remainingTime - (currentTime - lastLoginTime).coerceAtLeast(0)
+            database.updateJailPlayerStatus(player.uniqueId, player.name, isJailed, newRemainingTime)
+            if (newRemainingTime > 0) {
+                // Teleport player to prison and show remaining time
                 val prisonLocation = database.getPosition("prison")
                 if (prisonLocation != null) {
                     player.teleport(prisonLocation)
                 }
-
-                // 남은 시간 안내
-                val remainingMinutes = remainingTime / 60000
-                player.sendMessage("당신은 아직 감옥에 있습니다. 남은 시간: ${remainingMinutes}분")
-
-                // 석방 예약
-                PrisonUtils.scheduleRelease(player, remainingTime)
-
-                // 감옥 상태 업데이트 (마지막 로그인 시간 갱신)
-                database.updateJailPlayerStatus(player.uniqueId, player.name, true, remainingTime)
+                val remainingMinutes = newRemainingTime / 60000
+                val remainingSeconds = (newRemainingTime % 60000) / 1000
+                player.sendMessage("You are still in prison. Remaining time: ${remainingMinutes} minutes ${remainingSeconds} seconds")
+                // Show boss bar
+                PrisonUtils.showBossBar(player, newRemainingTime)
             } else {
-                // 감옥 시간이 끝났으므로 석방
                 PrisonUtils.releasePlayer(player)
             }
         }

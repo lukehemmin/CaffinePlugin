@@ -19,6 +19,22 @@ object PrisonUtils {
     lateinit var database: Database
     private val playerBossBars = mutableMapOf<UUID, BossBar>()
     private val playerRemainingTimes = mutableMapOf<UUID, Long>()
+    private val playerTaskIds = mutableMapOf<UUID, Int>()
+
+    private var taskId: Int = -1 // 기본값으로 초기화
+
+    fun startTask() {
+        taskId = plugin.server.scheduler.runTaskTimer(plugin, Runnable {
+            // 작업 로직
+        }, 0L, 20L).taskId
+    }
+
+    fun stopTask() {
+        if (taskId != -1) {
+            plugin.server.scheduler.cancelTask(taskId)
+            taskId = -1 // taskId 초기화
+        }
+    }
 
     fun init(plugin: JavaPlugin, database: Database) {
         this.plugin = plugin
@@ -38,7 +54,7 @@ object PrisonUtils {
             player.level = savedLevel
             player.exp = savedExp
         } else {
-            player.inventory.clear() // 저장된 인벨토리가 없으면 초기화
+            player.inventory.clear() // 저장된 인벤토리가 없으면 초기화
             player.level = savedLevel
             player.exp = savedExp
         }
@@ -155,17 +171,20 @@ object PrisonUtils {
                 updateBossBar(player, timeLeft)
                 playerRemainingTimes[player.uniqueId] = timeLeft
                 timeLeft -= 1000 // 1초 감소
+
+                // 남은 시간을 데이터베이스에 업데이트
+                database.updateJailPlayerStatus(player.uniqueId, player.name, true, timeLeft)
             }
         }, 0L, 20L) // 20틱(1초)마다 실행
 
         // 플레이어의 보스바 업데이트 태스크 ID 저장
-        playerBossBars[player.uniqueId]?.setProgress(1.0)
+        playerTaskIds[player.uniqueId] = taskId
     }
 
     fun updateBossBar(player: Player, remainingTime: Long) {
         playerBossBars[player.uniqueId]?.let { bossBar ->
             bossBar.setTitle("남은 감옥 시간: ${remainingTime / 60000}분 ${remainingTime % 60000 / 1000}초")
-            bossBar.progress = remainingTime / (remainingTime + 1000.0)
+            bossBar.progress = (remainingTime / 60000.0).coerceAtMost(1.0)
         }
     }
 
@@ -173,6 +192,12 @@ object PrisonUtils {
         playerBossBars[player.uniqueId]?.let { bossBar ->
             bossBar.removeAll()
             playerBossBars.remove(player.uniqueId)
+        }
+
+        // 보스바 업데이트 태스크 취소
+        playerTaskIds[player.uniqueId]?.let { taskId ->
+            Bukkit.getScheduler().cancelTask(taskId)
+            playerTaskIds.remove(player.uniqueId)
         }
     }
 }

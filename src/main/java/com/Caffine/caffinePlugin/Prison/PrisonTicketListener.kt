@@ -12,8 +12,6 @@ import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
-import org.bukkit.util.io.BukkitObjectInputStream
-import java.io.ByteArrayInputStream
 import java.util.*
 
 class PrisonTicketListener(private val plugin: JavaPlugin, private val database: Database) : Listener {
@@ -51,8 +49,6 @@ class PrisonTicketListener(private val plugin: JavaPlugin, private val database:
             return
         }
 
-        if (!isPrisonTicket(itemInHand)) return
-
         event.isCancelled = true
 
         // 클릭된 플레이어가 이미 감옥에 있는지 확인
@@ -82,7 +78,8 @@ class PrisonTicketListener(private val plugin: JavaPlugin, private val database:
     }
 
     private fun isPrisonTicket(item: ItemStack): Boolean {
-        return item.type != Material.AIR && item.itemMeta?.displayName?.startsWith("§e§l감옥 티켓") == true
+        val meta = item.itemMeta ?: return false
+        return item.type != Material.AIR && meta.displayName.startsWith("§e§l감옥 티켓")
     }
 
     private fun getTicketDuration(item: ItemStack): Int {
@@ -90,20 +87,12 @@ class PrisonTicketListener(private val plugin: JavaPlugin, private val database:
         return displayName.substringAfter("(").substringBefore("분)").toIntOrNull() ?: 0
     }
 
-    private fun deserializeItemStack(data: String): ItemStack {
-        val bais = ByteArrayInputStream(Base64.getDecoder().decode(data))
-        val ois = BukkitObjectInputStream(bais)
-        val item = ois.readObject() as ItemStack
-        ois.close()
-        return item
-    }
-
     private fun removeTicketFromHand(player: Player) {
         val itemInHand = player.inventory.itemInMainHand
         if (itemInHand.amount > 1) {
             itemInHand.amount -= 1
         } else {
-            player.inventory.setItemInMainHand(null)
+            player.inventory.setItemInMainHand(ItemStack(Material.AIR))
         }
     }
 }

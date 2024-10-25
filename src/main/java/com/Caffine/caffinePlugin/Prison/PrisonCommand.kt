@@ -80,14 +80,14 @@ class PrisonCommand(private val plugin: JavaPlugin, private val database: Databa
         }
 
         val ticketItem = itemInHand.clone()
-        ticketItem.itemMeta = ticketItem.itemMeta?.apply {
-            setDisplayName("§e§l감옥 티켓 (${duration}분)")
-            lore = listOf(
-                "§7이 티켓을 사용하면 플레이어를",
-                "§7${duration}분 동안 감옥에 가둘 수 있습니다.",
-                "§c우클릭으로 사용"
-            )
-        }
+        val meta = ticketItem.itemMeta
+        meta?.setDisplayName("§e§l감옥 티켓 (${duration}분)")
+        meta?.lore = listOf(
+            "§7이 티켓을 사용하면 플레이어를",
+            "§7${duration}분 동안 감옥에 가둘 수 있습니다.",
+            "§c우클릭으로 사용"
+        )
+        ticketItem.itemMeta = meta
 
         player.inventory.setItemInMainHand(ticketItem)
         player.sendMessage("성공적으로 ${duration}분 감옥 티켓을 생성했습니다.")
