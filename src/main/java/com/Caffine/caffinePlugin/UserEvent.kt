@@ -20,6 +20,12 @@ import java.util.UUID
 object UserEvent : Listener {
     private val prefix: String = (FileUtil.getDataFile("", "config", "prefix") as? String)?.replace("&", "§") ?: ""
     val prisonMap: HashMap<UUID, Int> = HashMap()
+    private lateinit var plugin: Main
+
+    // plugin 초기화 메서드 추가
+    fun initialize(mainPlugin: Main) {
+        plugin = mainPlugin
+    }
 
     @EventHandler
     fun onUserJoin(e: PlayerJoinEvent) {
@@ -112,25 +118,42 @@ object UserEvent : Listener {
     fun restoreInventory(player: Player) {
         val userId = player.uniqueId
         if (FileUtil.existsFile("tempData", userId.toString())) {
-            val inventory = player.inventory.contents
-            for (i in inventory.indices) {
+            // 먼저 현재 인벤토리 클리어
+            player.inventory.clear()
+
+            // 위치 복원
+            val originalLocation = FileUtil.getDataFile("tempData", userId.toString(), "Location") as? Location
+            if (originalLocation != null) {
+                player.teleport(originalLocation)
+                plugin.logger.info("[Prison] ${player.name}의 위치를 ${originalLocation.x}, ${originalLocation.y}, ${originalLocation.z}로 복원")
+            }
+
+            // 인벤토리 복원
+            for (i in 0..35) { // 메인 인벤토리 슬롯
                 val item = FileUtil.getDataFile("tempData", userId.toString(), "Inventory.$i") as? ItemStack
-                item?.let {
-                    player.inventory.setItem(i, it)
+                if (item != null) {
+                    player.inventory.setItem(i, item)
                 }
             }
-            // 플레이어의 위치 복원
-            val originalLocation = FileUtil.getDataFile("tempData", userId.toString(), "Location") as? Location
-            originalLocation?.let {
-                player.teleport(it)
-            }
-            // 레벨 및 경험치 복원
+
+            // 레벨과 경험치 복원
             val level = FileUtil.getDataFile("tempData", userId.toString(), "Level") as? Int
             val experience = FileUtil.getDataFile("tempData", userId.toString(), "Experience") as? Int
-            level?.let { player.level = it }
-            experience?.let { player.totalExperience = it }
 
+            level?.let {
+                player.level = it
+                plugin.logger.info("[Prison] ${player.name}의 레벨을 $it 로 복원")
+            }
+            experience?.let {
+                player.totalExperience = it
+                plugin.logger.info("[Prison] ${player.name}의 경험치를 $it 로 복원")
+            }
+
+            // 복원 후 임시 데이터 삭제
             FileUtil.deleteFile("tempData", userId.toString())
+            plugin.logger.info("[Prison] ${player.name}의 임시 데이터 파일 삭제 완료")
+        } else {
+            plugin.logger.warning("[Prison] ${player.name}의 임시 데이터 파일을 찾을 수 없습니다.")
         }
     }
 
