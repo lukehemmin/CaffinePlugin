@@ -70,6 +70,9 @@ class PrisonAdminCommand : CommandExecutor {
                     return
                 }
 
+                // 현재 위치 저장
+                FileUtil.setDataFile("tempData", uuid.toString(), "Location", targetPlayer.location)
+
                 targetPlayer.teleport(prisonLocation)
                 targetPlayer.sendMessage("$prefix 당신은 $time 분 동안 감옥에 보내졌습니다.")
                 saveInventory(targetPlayer)
