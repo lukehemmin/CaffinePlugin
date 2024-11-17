@@ -5,6 +5,6 @@ api-version: '1.20'
 depend: [Citizens]
 
 commands:
-  감옥:
+  감옥관리:
     description: 감옥 관련 명령어
-    usage: /감옥
+    usage: /감옥관리

@@ -48,17 +48,8 @@ class Main : JavaPlugin() {
 
                         user.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent(""))
 
-                        val slots = FileUtil.getItemList("tempData", userId.toString(), "Inventory")
-                        if (slots != null) {
-                            for (slot in slots) {
-                                val item = FileUtil.getDataFile("tempData", userId.toString(), "Inventory.$slot") as? ItemStack
-                                item?.let {
-                                    user.inventory.setItem(slot.toInt(), it)
-                                }
-                            }
-                        }
-
-                        FileUtil.deleteFile("tempData", userId.toString())
+                        // 인벤토리 복원은 restoreInventory 메서드에서 처리되므로 여기서 다시 할 필요 없음
+                        // FileUtil.deleteFile("tempData", userId.toString())
                     } else {
                         UserEvent.prisonMap[userId] = prisonTime - 1
                         val msg = timeReturn(prisonTime - 1)
